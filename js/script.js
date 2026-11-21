@@ -43,6 +43,7 @@ let previousPositions = [];
 
 let musicEnabled = true;
 let bookingAnimationRunning = false;
+let bookingRequestRunning = false;
 
 const questions = [
   "Are you sure?",
@@ -51,12 +52,17 @@ const questions = [
 
 const escapeDistance = 85;
 
+// Production PHP API
+const BOOKING_API = "https://cnk.ge/api/setup.php?action=book";
+
 
 /* --------------------------------
    SCREEN SWITCHING
 -------------------------------- */
 
 function showScreen(screen) {
+  if (!screen) return;
+
   document.querySelectorAll(".screen").forEach(item => {
     item.classList.remove("active");
   });
@@ -79,7 +85,9 @@ function getLocalDateString() {
   return `${year}-${month}-${day}`;
 }
 
-dateInput.min = getLocalDateString();
+if (dateInput) {
+  dateInput.min = getLocalDateString();
+}
 
 
 /* --------------------------------
@@ -147,7 +155,7 @@ function showNoQuestion() {
 -------------------------------- */
 
 function moveNoButton() {
-  if (!isRunaway || isMoving) return;
+  if (!isRunaway || isMoving || !stage || !noButton) return;
 
   isMoving = true;
 
@@ -156,37 +164,45 @@ function moveNoButton() {
   const buttonWidth = noButton.offsetWidth;
   const buttonHeight = noButton.offsetHeight;
 
+  const stageRect = stage.getBoundingClientRect();
   const currentRect = noButton.getBoundingClientRect();
+
+  // Stage-ის რეალური საზღვრები
 
   const minX = padding;
   const minY = padding;
 
   const maxX = Math.max(
     minX,
-    window.innerWidth - buttonWidth - padding
+    stageRect.width - buttonWidth - padding
   );
 
   const maxY = Math.max(
     minY,
-    window.innerHeight - buttonHeight - padding
+    stageRect.height - buttonHeight - padding
   );
 
-  const moveDistance = 100;
+  // მიმდინარე პოზიცია Stage-ის მიმართ
+
+  const currentX = currentRect.left - stageRect.left;
+  const currentY = currentRect.top - stageRect.top;
+
+  const moveDistance = 120;
   const candidates = [];
 
   for (let i = 0; i < 100; i++) {
     const angle = Math.random() * Math.PI * 2;
     const distance = 45 + Math.random() * moveDistance;
 
-    let x = currentRect.left + Math.cos(angle) * distance;
-    let y = currentRect.top + Math.sin(angle) * distance;
+    let x = currentX + Math.cos(angle) * distance;
+    let y = currentY + Math.sin(angle) * distance;
 
     x = Math.max(minX, Math.min(maxX, x));
     y = Math.max(minY, Math.min(maxY, y));
 
     const currentDistance = Math.hypot(
-      x - currentRect.left,
-      y - currentRect.top
+      x - currentX,
+      y - currentY
     );
 
     const historyDistance = previousPositions.length
@@ -214,11 +230,6 @@ function moveNoButton() {
     return;
   }
 
-  const stageRect = stage.getBoundingClientRect();
-
-  const newX = best.x - stageRect.left;
-  const newY = best.y - stageRect.top;
-
   previousPositions.push({
     x: best.x,
     y: best.y
@@ -230,8 +241,8 @@ function moveNoButton() {
 
   noButton.classList.add("moving");
 
-  noButton.style.left = `${newX}px`;
-  noButton.style.top = `${newY}px`;
+  noButton.style.left = `${best.x}px`;
+  noButton.style.top = `${best.y}px`;
 
   setTimeout(() => {
     isMoving = false;
@@ -243,76 +254,80 @@ function moveNoButton() {
    MOUSE PROXIMITY DETECTION
 -------------------------------- */
 
-stage.addEventListener("mousemove", (event) => {
-  if (!isRunaway || isMoving) return;
+if (stage && noButton) {
+  stage.addEventListener("mousemove", (event) => {
+    if (!isRunaway || isMoving) return;
 
-  const rect = noButton.getBoundingClientRect();
+    const rect = noButton.getBoundingClientRect();
 
-  const mouseX = event.clientX;
-  const mouseY = event.clientY;
+    const mouseX = event.clientX;
+    const mouseY = event.clientY;
 
-  const closestX = Math.max(
-    rect.left,
-    Math.min(mouseX, rect.right)
-  );
+    const closestX = Math.max(
+      rect.left,
+      Math.min(mouseX, rect.right)
+    );
 
-  const closestY = Math.max(
-    rect.top,
-    Math.min(mouseY, rect.bottom)
-  );
+    const closestY = Math.max(
+      rect.top,
+      Math.min(mouseY, rect.bottom)
+    );
 
-  const distance = Math.hypot(
-    mouseX - closestX,
-    mouseY - closestY
-  );
+    const distance = Math.hypot(
+      mouseX - closestX,
+      mouseY - closestY
+    );
 
-  if (distance < escapeDistance) {
-    moveNoButton();
-  }
-});
+    if (distance < escapeDistance) {
+      moveNoButton();
+    }
+  });
+}
 
 
 /* --------------------------------
    NO BUTTON EVENTS
 -------------------------------- */
 
-noButton.addEventListener("mouseenter", () => {
-  if (isRunaway) {
-    moveNoButton();
-  } else {
-    showNoQuestion();
-  }
-});
+if (noButton) {
+  noButton.addEventListener("mouseenter", () => {
+    if (isRunaway) {
+      moveNoButton();
+    } else {
+      showNoQuestion();
+    }
+  });
 
 
-/* --------------------------------
-   MOBILE TOUCH
--------------------------------- */
+  /* --------------------------------
+     MOBILE TOUCH
+  -------------------------------- */
 
-noButton.addEventListener("touchstart", (event) => {
-  event.preventDefault();
+  noButton.addEventListener("touchstart", (event) => {
+    event.preventDefault();
 
-  if (isRunaway) {
-    moveNoButton();
-  } else {
-    showNoQuestion();
-  }
-}, { passive: false });
+    if (isRunaway) {
+      moveNoButton();
+    } else {
+      showNoQuestion();
+    }
+  }, { passive: false });
 
 
-/* --------------------------------
-   NO BUTTON CLICK
--------------------------------- */
+  /* --------------------------------
+     NO BUTTON CLICK
+  -------------------------------- */
 
-noButton.addEventListener("click", (event) => {
-  event.preventDefault();
+  noButton.addEventListener("click", (event) => {
+    event.preventDefault();
 
-  if (isRunaway) {
-    moveNoButton();
-  } else {
-    showNoQuestion();
-  }
-});
+    if (isRunaway) {
+      moveNoButton();
+    } else {
+      showNoQuestion();
+    }
+  });
+}
 
 
 /* --------------------------------
@@ -500,8 +515,6 @@ function startCelebration() {
     <div class="celebration-bow">🎀</div>
 
     <h2>მართლა უნდა წამოხვიდე ხოიცი!</h2>
-
-    <h3>პატარა გოგო 🎀</h3>
 
     <p>This just got exciting.</p>
 
@@ -1041,127 +1054,298 @@ function startBookingCelebration() {
    YES BUTTON
 -------------------------------- */
 
-yesButton.addEventListener("click", () => {
-  clearTimeout(questionTimer);
+if (yesButton) {
+  yesButton.addEventListener("click", () => {
+    clearTimeout(questionTimer);
 
-  yesButton.disabled = true;
+    yesButton.disabled = true;
 
-  playCelebrationSound();
-  startCelebration();
+    playCelebrationSound();
+    startCelebration();
 
-  setTimeout(() => {
-    showScreen(detailsScreen);
-    yesButton.disabled = false;
-  }, 3200);
-});
+    setTimeout(() => {
+      showScreen(detailsScreen);
+      yesButton.disabled = false;
+    }, 3200);
+  });
+}
 
 
 /* --------------------------------
    BACK BUTTON
 -------------------------------- */
 
-backButton.addEventListener("click", () => {
-  stopBackgroundMusic();
-  showScreen(questionScreen);
-});
+if (backButton) {
+  backButton.addEventListener("click", () => {
+    if (bookingRequestRunning) return;
+
+    stopBackgroundMusic();
+    showScreen(questionScreen);
+  });
+}
 
 
 /* --------------------------------
-   CONFIRM DATE & TIME
+   CONFIRM DATE & TIME + DATABASE
 -------------------------------- */
 
-confirmButton.addEventListener("click", () => {
-  if (bookingAnimationRunning) return;
+if (confirmButton) {
+  confirmButton.addEventListener("click", async () => {
+    if (bookingAnimationRunning || bookingRequestRunning) return;
 
-  const selectedDate = dateInput.value;
-  const selectedTime = timeInput.value;
+    const selectedDate = dateInput.value;
+    const selectedTime = timeInput.value;
 
-  if (!selectedDate || !selectedTime) {
-    if (!selectedDate) {
+    if (!selectedDate || !selectedTime) {
+      if (!selectedDate) {
+        dateInput.focus();
+      } else {
+        timeInput.focus();
+      }
+
+      return;
+    }
+
+    if (selectedDate < getLocalDateString()) {
+      dateInput.value = "";
       dateInput.focus();
-    } else {
-      timeInput.focus();
+      alert("გთხოვ, აირჩიე დღევანდელი ან მომავალი თარიღი.");
+      return;
     }
 
-    return;
-  }
+    // ვიღებთ მონიშნულ აქტივობებს
+    // "ყველა" არ იგზავნება ბაზაში
 
-  if (selectedDate < getLocalDateString()) {
-    dateInput.value = "";
-    dateInput.focus();
-    return;
-  }
+    const selectedPlans = [
+      ...document.querySelectorAll(".plan-item.selected")
+    ]
+      .map(item => item.dataset.plan)
+      .filter(plan => plan && plan !== "ყველა");
 
-  const dateObject = new Date(
-    `${selectedDate}T12:00:00`
-  );
-
-  const formattedDate = dateObject.toLocaleDateString(
-    "en-US",
-    {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric"
+    if (selectedPlans.length === 0) {
+      alert("გთხოვ, აირჩიე მინიმუმ ერთი აქტივობა.");
+      return;
     }
-  );
 
-  const [hours, minutes] = selectedTime.split(":");
+    const originalButtonText = confirmButton.textContent;
 
-  const formattedTime = new Date(
-    2000,
-    0,
-    1,
-    Number(hours),
-    Number(minutes)
-  ).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit"
+    bookingRequestRunning = true;
+    confirmButton.disabled = true;
+    confirmButton.textContent = "იტვირთება...";
+
+    try {
+      const response = await fetch(BOOKING_API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          date: selectedDate,
+          time: selectedTime,
+          plans: selectedPlans
+        })
+      });
+
+      // ვამოწმებთ, რომ სერვერმა JSON პასუხი დააბრუნა
+
+      let result;
+
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error("სერვერმა არასწორი პასუხი დააბრუნა.");
+      }
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message || "ჯავშნის შენახვა ვერ მოხერხდა."
+        );
+      }
+
+      // თარიღის ფორმატირება
+
+      const dateObject = new Date(
+        `${selectedDate}T12:00:00`
+      );
+
+      const formattedDate = dateObject.toLocaleDateString(
+        "en-US",
+        {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric"
+        }
+      );
+
+      // დროის ფორმატირება
+
+      const [hours, minutes] = selectedTime.split(":");
+
+      const formattedTime = new Date(
+        2000,
+        0,
+        1,
+        Number(hours),
+        Number(minutes)
+      ).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit"
+      });
+
+      resultDate.textContent = formattedDate;
+      resultTime.textContent = formattedTime;
+
+      // წარმატებული შენახვის შემდეგ Success ეკრანი
+
+      showScreen(successScreen);
+
+      startBookingCelebration();
+
+    } catch (error) {
+      console.error("Booking error:", error);
+
+      alert(
+        error.message ||
+        "სერვერთან დაკავშირება ვერ მოხერხდა. სცადე თავიდან."
+      );
+
+    } finally {
+      bookingRequestRunning = false;
+      confirmButton.disabled = false;
+      confirmButton.textContent = originalButtonText;
+    }
   });
-
-  resultDate.textContent = formattedDate;
-  resultTime.textContent = formattedTime;
-
-  showScreen(successScreen);
-
-  startBookingCelebration();
-});
+}
 
 
 /* --------------------------------
    RESTART
 -------------------------------- */
 
-restartButton.addEventListener("click", () => {
-  stopBackgroundMusic();
+if (restartButton) {
+  restartButton.addEventListener("click", () => {
+    if (bookingRequestRunning) return;
 
-  dateInput.value = "";
-  timeInput.value = "";
+    stopBackgroundMusic();
 
-  questionCount = 0;
-  isRunaway = false;
-  isMoving = false;
+    dateInput.value = "";
+    timeInput.value = "";
 
-  previousPositions = [];
+    questionCount = 0;
+    isRunaway = false;
+    isMoving = false;
 
-  clearTimeout(questionTimer);
+    previousPositions = [];
 
-  noQuestion.classList.remove("visible");
+    clearTimeout(questionTimer);
 
-  noButton.style.display = "";
-  noButton.classList.remove("moving");
+    noQuestion.classList.remove("visible");
 
-  noButton.style.left = "";
-  noButton.style.top = "";
+    noButton.style.display = "";
+    noButton.classList.remove("moving");
 
-  musicEnabled = true;
-  updateMusicButton();
+    noButton.style.left = "";
+    noButton.style.top = "";
 
-  updateHint(
-    "One of these buttons is behaving strangely."
-  );
+    // აქტივობების განულება
 
-  showScreen(questionScreen);
+    planItems.forEach(plan => {
+      plan.classList.remove("selected");
+      plan.setAttribute("aria-pressed", "false");
+    });
+
+    const selectionHint = document.querySelector(".selection-hint");
+
+    if (selectionHint) {
+      selectionHint.textContent = "აირჩიე სასურველი აქტივობები";
+    }
+
+    musicEnabled = true;
+    updateMusicButton();
+
+    updateHint(
+      "One of these buttons is behaving strangely."
+    );
+
+    showScreen(questionScreen);
+  });
+}
+
+
+/* --------------------------------
+   ACTIVITY SELECTION
+-------------------------------- */
+
+const planItems = document.querySelectorAll(".plan-item");
+
+const allButton = document.querySelector(
+  '.plan-item[data-plan="ყველა"]'
+);
+
+planItems.forEach((item) => {
+  item.addEventListener("click", () => {
+
+    // თუ დააჭირეს "ყველას"
+
+    if (item === allButton) {
+      const shouldSelectAll = !item.classList.contains("selected");
+
+      planItems.forEach((plan) => {
+        plan.classList.toggle("selected", shouldSelectAll);
+
+        plan.setAttribute(
+          "aria-pressed",
+          shouldSelectAll ? "true" : "false"
+        );
+      });
+
+    } else {
+
+      // ჩვეულებრივი აქტივობის მონიშვნა / მოხსნა
+
+      item.classList.toggle("selected");
+
+      item.setAttribute(
+        "aria-pressed",
+        item.classList.contains("selected") ? "true" : "false"
+      );
+
+      // შევამოწმოთ ყველა აქტივობა მონიშნულია თუ არა
+
+      const regularItems = [...planItems].filter(
+        plan => plan !== allButton
+      );
+
+      const allSelected = regularItems.length > 0 &&
+        regularItems.every(
+          plan => plan.classList.contains("selected")
+        );
+
+      if (allButton) {
+        allButton.classList.toggle("selected", allSelected);
+
+        allButton.setAttribute(
+          "aria-pressed",
+          allSelected ? "true" : "false"
+        );
+      }
+    }
+
+    // არჩეული აქტივობების რაოდენობა
+
+    const selectedCount = [...planItems].filter(
+      plan => plan !== allButton && plan.classList.contains("selected")
+    ).length;
+
+    const selectionHint = document.querySelector(".selection-hint");
+
+    if (selectionHint) {
+      selectionHint.textContent = selectedCount
+        ? `არჩეულია ${selectedCount} აქტივობა`
+        : "აირჩიე სასურველი აქტივობები";
+    }
+  });
 });
 
 
@@ -1169,53 +1353,4 @@ restartButton.addEventListener("click", () => {
    INITIAL MUSIC BUTTON STATE
 -------------------------------- */
 
-
-const planItems = document.querySelectorAll('.plan-item');
-const allButton = document.querySelector('.plan-item[data-plan="ყველა"]');
-
-planItems.forEach((item) => {
-  item.addEventListener('click', () => {
-    // თუ დააჭირეს "ყველას"
-    if (item === allButton) {
-      const shouldSelectAll = !item.classList.contains('selected');
-
-      planItems.forEach((plan) => {
-        plan.classList.toggle('selected', shouldSelectAll);
-        plan.setAttribute('aria-pressed', shouldSelectAll ? 'true' : 'false');
-      });
-    } else {
-      // ჩვეულებრივი აქტივობის მონიშვნა / მოხსნა
-      item.classList.toggle('selected');
-
-      item.setAttribute(
-        'aria-pressed',
-        item.classList.contains('selected') ? 'true' : 'false'
-      );
-
-      // შევამოწმოთ ყველა აქტივობა მონიშნულია თუ არა
-      const regularItems = [...planItems].filter(
-        plan => plan !== allButton
-      );
-
-      const allSelected = regularItems.every(
-        plan => plan.classList.contains('selected')
-      );
-
-      allButton.classList.toggle('selected', allSelected);
-      allButton.setAttribute('aria-pressed', allSelected ? 'true' : 'false');
-    }
-
-    // არჩეული აქტივობების რაოდენობა
-    const selectedCount = [...planItems].filter(
-      plan => plan !== allButton && plan.classList.contains('selected')
-    ).length;
-
-    const hint = document.querySelector('.selection-hint');
-
-    if (hint) {
-      hint.textContent = selectedCount
-        ? `არჩეულია ${selectedCount} აქტივობა`
-        : 'აირჩიე სასურველი აქტივობები';
-    }
-  });
-});
+updateMusicButton();
